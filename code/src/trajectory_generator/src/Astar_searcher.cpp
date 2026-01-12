@@ -202,8 +202,17 @@ inline void Astarpath::AstarGetSucc(MappingNodePtr currentPtr,
 double Astarpath::getHeu(MappingNodePtr node1, MappingNodePtr node2) {
   
   // 使用数字距离和一种类型的tie_breaker
-  double heu;
-  double tie_breaker;
+  double dx = node1->coord(0) - node2->coord(0);
+  double dy = node1->coord(1) - node2->coord(1);
+  double dz = node1->coord(2) - node2->coord(2);
+  double euclidean_dist = sqrt(dx*dx + dy*dy + dz*dz);
+
+  // Tie-breaker（打破平局）：添加微小偏置优先扩展更接近目标的节点
+  // 系数建议0.01~0.1，避免破坏可采纳性
+  double tie_breaker = 1 + 0.01; 
+
+  // 最终启发值 = 欧几里得距离 * tie-breaker
+  double heu = euclidean_dist * tie_breaker;
   
   return heu;
 }
@@ -261,11 +270,17 @@ bool Astarpath::AstarSearch(Vector3d start_pt, Vector3d end_pt) {
 
   while (!Openset.empty()) {
     //1.弹出g+h最小的节点
-    //????
+    auto iter = Openset.begin(); // 取multimap第一个元素（f最小）
+    currentPtr = iter->second;   // 获取节点指针
+    Openset.erase(iter);        // 从openlist移除
+    currentPtr->id = -1;        // 标记为closelist
     //2.判断是否是终点
-    //????
+    if (currentPtr->index == end_idx) {
+      terminatePtr = currentPtr; // 记录终点指针
+      return true;               // 找到路径，返回成功
+    }
     //3.拓展当前节点
-    //????
+    AstarGetSucc(currentPtr, neighborPtrSets, edgeCostSets);
     for(unsigned int i=0;i<neighborPtrSets.size();i++)
     {
       
@@ -280,12 +295,21 @@ bool Astarpath::AstarSearch(Vector3d start_pt, Vector3d end_pt) {
       if(neighborPtr->id==0)
       {
         //4.填写信息，完成更新
-        //???
+        neighborPtr->g_score = tentative_g_score;          // 更新g值
+        neighborPtr->Father = currentPtr;                 // 设置父节点
+        neighborPtr->f_score = tentative_g_score + getHeu(neighborPtr, endPtr); // 更新f值
+        neighborPtr->id = 1;                              // 标记为openlist
+        Openset.insert(make_pair(neighborPtr->f_score, neighborPtr)); // 加入openlist
         continue;
       }
       else if(neighborPtr->id==1)
       {
-        //???
+        if(neighborPtr->g_score > tentative_g_score){
+          neighborPtr->g_score = tentative_g_score;
+          neighborPtr->Father = currentPtr;
+          neighborPtr->f_score = tentative_g_score + getHeu(neighborPtr, endPtr);
+          Openset.insert(make_pair(neighborPtr->f_score, neighborPtr));
+        }
       continue;
       }
     }
@@ -314,7 +338,9 @@ terminatePtr=terminatePtr->Father;
    *
    * **/
 
-  // ???
+    for (int i = front_path.size() - 1; i >= 0; i--) {
+    path.push_back(front_path[i]->coord);
+  }
 
   return path;
 }
@@ -431,9 +457,9 @@ int Astarpath::safeCheck(MatrixXd polyCoeff, VectorXd time) {
 
 void Astarpath::resetOccupy(){
   for (int i = 0; i < GRID_X_SIZE; i++)
-for (int j = 0; j < GRID_Y_SIZE; j++)
-  for (int k = 0; k < GRID_Z_SIZE; k++) {
-    data[i * GLYZ_SIZE + j * GRID_Z_SIZE + k] = 0;
-    data_raw[i * GLYZ_SIZE + j * GRID_Z_SIZE + k] = 0;
-  }
+    for (int j = 0; j < GRID_Y_SIZE; j++)
+      for (int k = 0; k < GRID_Z_SIZE; k++) {
+        data[i * GLYZ_SIZE + j * GRID_Z_SIZE + k] = 0;
+        data_raw[i * GLYZ_SIZE + j * GRID_Z_SIZE + k] = 0;
+      }
 }
